@@ -1,0 +1,2 @@
+# pairdc
+Pairwise disease similarity
