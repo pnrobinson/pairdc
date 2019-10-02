@@ -2,7 +2,7 @@ package org.jax.pairdc;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
-import com.beust.jcommander.Parameters;
+import com.beust.jcommander.ParameterException;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
@@ -21,11 +21,19 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
+
+/**
+ * To run this app, enter (adjusting the paths accordingly)
+ * <pre>
+ *   java -jar pairdc.jar  --hpo hp.obo -a phenotype.hpoa -o TEST --geneinfo Homo_sapiens_gene_info.gz --mim2genemedgen mim2gene_medgen
+ * </pre>
+ */
 public class Main {
     /** Path to {@code hp.obo}. */
-    @Parameter(names = {"-h"}, description = "path to hp.obo file", required = true)
+    @Parameter(names = {"-h","--hpo"}, description = "path to hp.obo file", required = true)
     private String hpoPath;
     /** Path to {@code phenotype.hpoa}. */
     @Parameter(names="-a", description = "path to phenotype.hpoa file", required = true)
@@ -36,10 +44,14 @@ public class Main {
     @Parameter(names="--geneinfo",description = "path to downloaded file ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz")
     private String geneInfoPath;
     /** Path to {@code mim2gene_medgen} file with gene to disease associations.*/
-    @Parameter(names="--mimgene2medgen",description = "path to downloaded file from ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/mim2gene_medgen")
+    @Parameter(names="--mim2genemedgen",description = "path to downloaded file from ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/mim2gene_medgen")
     private String mim2genMedgenPath;
     /** Number of threads to use. */
     private final int numThreads = 4;
+    @Parameter(names="--date1", description = "First data for simulation, e.g., 4/2014", required = true)
+    private String date1;
+    @Parameter(names="--date2", description = "Second data for simulation, e.g., 9/2017", required = true)
+    private String date2;
 
     /** If true, perform pairwise gene-gene similarity analysis. Otherwise, perform pairwise disease-disease analysis.*/
     private boolean doGeneBasedAnalysis;
@@ -60,12 +72,19 @@ public class Main {
 
     static public void main(String[] args) {
         Main m = new Main();
-        JCommander.newBuilder()
-                .addObject(m)
-                .build().
-                parse(args);
-
-        m.run();
+        try {
+            JCommander.newBuilder()
+                    .addObject(m)
+                    .build().
+                    parse(args);
+        } catch (ParameterException e) {
+            e.printStackTrace();
+        }
+        try {
+            m.run();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
 
@@ -273,7 +292,14 @@ public class Main {
     /**
      * Run application.
      */
-    private void run() {
+    private void run() throws  Exception {
+        Date dt1 = new SimpleDateFormat("MM/yyyy").parse(date1);
+        Date dt2 = new SimpleDateFormat("MM/yyyy").parse(date2);
+
+        PhenotypeDotHpoaParser phparser = new PhenotypeDotHpoaParser(this.phenotypeDotHpoaPath,dt1,dt2);
+        phparser.createDatedPhenotypeHpoaFiles();
+
+        if (true) return;
         if (hpoPath==null || phenotypeDotHpoaPath == null) {
             System.err.println("[ERROR] Must pass path-to-hp.obo and path-to-phenotype.hpoa");
             System.exit(1);
@@ -285,12 +311,14 @@ public class Main {
         this.diseaseMap = HpoDiseaseAnnotationParser.loadDiseaseMap(this.phenotypeDotHpoaPath, hpo,databases);
         System.out.println("[INFO] DONE: Loading phenotype.hpoa");
 
+
         // Compute list of annoations and mapping from OMIM ID to term IDs.
         final Map<TermId, Collection<TermId>> diseaseIdToTermIds = new HashMap<>();
         final Map<TermId, Collection<TermId>> termIdToDiseaseIds = new HashMap<>();
 
         for (TermId diseaseId : diseaseMap.keySet()) {
             HpoDisease disease = diseaseMap.get(diseaseId);
+
             List<TermId> hpoTerms = disease.getPhenotypicAbnormalityTermIdList();
             diseaseIdToTermIds.putIfAbsent(diseaseId, new HashSet<>());
             // add term anscestors
@@ -350,7 +378,7 @@ public class Main {
             }
         }
 
-        System.out.println(String.format("[INFO] Disease analysis: skipped vales: %d, good values %d",stats.skippedNanValue,stats.goodValue));
+        System.out.println(String.format("[INFO] Disease analysis: skipped values: %d, good values %d",stats.skippedNanValue,stats.goodValue));
         if (doGeneBasedAnalysis) {
             performGeneBasedAnalysis();
         } else {
