@@ -1,5 +1,6 @@
 package org.jax.pairdc;
 
+import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
 import com.google.common.collect.ImmutableList;
@@ -23,34 +24,23 @@ import java.io.IOException;
 import java.util.*;
 
 public class Main {
-
-
-    static public void main(String[] args) {
-        System.out.println("hallo");
-    }
-
+    /** Path to {@code hp.obo}. */
+    @Parameter(names = {"-h"}, description = "path to hp.obo file", required = true)
+    private String hpoPath;
+    /** Path to {@code phenotype.hpoa}. */
+    @Parameter(names="-a", description = "path to phenotype.hpoa file", required = true)
+    private String phenotypeDotHpoaPath;
+    @Parameter(names="-o",description = "output file name")
+    private String outname="pairwise_disease_similarity.tsv";
+    /** Path to {@code Homo_sapiens_gene_info.gz} file. */
+    @Parameter(names="--geneinfo",description = "path to downloaded file ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz")
+    private String geneInfoPath;
+    /** Path to {@code mim2gene_medgen} file with gene to disease associations.*/
+    @Parameter(names="--mimgene2medgen",description = "path to downloaded file from ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/mim2gene_medgen")
+    private String mim2genMedgenPath;
     /** Number of threads to use. */
     private final int numThreads = 4;
 
-
-    /**
-     * Path to {@code hp.obo}.
-     */
-    private final String pathHpObo;
-
-    /**
-     * Path to {@code phenotype.hpoa}
-     */
-    private final String pathPhenotypeHpoa;
-
-
-
-    private final String output_filename;
-
-    /** Path to {@code mim2gene_medgen} file with gene to disease associations.*/
-    private String mimgeneMedgenPath;
-    /** Path to {@code Homo_sapiens_gene_info.gz} file. */
-    private String geneInfoPath;
     /** If true, perform pairwise gene-gene similarity analysis. Otherwise, perform pairwise disease-disease analysis.*/
     private boolean doGeneBasedAnalysis;
 
@@ -65,6 +55,19 @@ public class Main {
     private Map<TermId,String> geneIdToSymbolMap;
     private int n_diseases;
 
+    public Main() { // no-op
+    }
+
+    static public void main(String[] args) {
+        Main m = new Main();
+        JCommander.newBuilder()
+                .addObject(m)
+                .build().
+                parse(args);
+
+        m.run();
+    }
+
 
 
 
@@ -74,8 +77,8 @@ public class Main {
         Double mean=null;
         Double sd=null;
 
-        public int skippedNanValue=0;
-        public int goodValue=0;
+        int skippedNanValue=0;
+        int goodValue=0;
 
         DescriptiveStatistics(){
             vals = new ArrayList<>();
@@ -112,48 +115,8 @@ public class Main {
         }
     }
 
-    /**
-     * Construct with argument list.
-     *
-tg
-     */
-    public Main(Options options) {
-        this.pathHpObo=options.getHpoPath();
-        this.pathPhenotypeHpoa=options.getPhenotypeDotHpoaPath();
-        this.output_filename=options.getOutname();
-        this.geneInfoPath=options.geneInfoPath;
-        this.mimgeneMedgenPath=options.mim2genMedgenPath;
-        if (geneInfoPath==null || mimgeneMedgenPath==null){
-            doGeneBasedAnalysis=false;
-            System.out.println("[INFO] We will perform disease-based phenotypic similarity analysis");
-        } else {
-            doGeneBasedAnalysis=true;
-            System.out.println("[INFO] We will perform gene-based phenotypic similarity analysis");
-        }
-        boolean badFile=false;
-        // check existence of Files
-        if (! (new File(this.pathHpObo).exists())) {
-            System.err.println("[ERROR] hp.obo file not found at "+pathHpObo);
-            badFile=true;
-        }
-        if (! (new File (this.pathPhenotypeHpoa).exists())) {
-            System.err.println("[ERROR] phenotype.hpoa file not found at "+pathPhenotypeHpoa);
-            badFile=true;
-        }
-        if (! (new File (this.geneInfoPath).exists())) {
-            System.err.println("[ERROR] Homo_sapiens_gene_info.gz not found at "+geneInfoPath);
-            badFile=true;
-        }
-        if (! (new File (this.mimgeneMedgenPath).exists())) {
-            System.err.println("[ERROR] mim2gene_medgen not found at "+mimgeneMedgenPath);
-            badFile=true;
-        }
-        if (badFile) {
-            System.err.println("[ERROR] please correct paths and try again");
-            System.exit(1);
-        }
 
-    }
+
 
     /**
      * A gene may be associated with multiple diseases. Here, we take the maximum disease-disease
@@ -197,7 +160,7 @@ tg
      * of phenotypic similarity of the diseases to which the genes are annotated.
      */
     private void performGeneBasedAnalysis() {
-        HpoAssociationParser hpoAssociationParser = new HpoAssociationParser(this.geneInfoPath,this.mimgeneMedgenPath,this.hpo);
+        HpoAssociationParser hpoAssociationParser = new HpoAssociationParser(this.geneInfoPath,this.mim2genMedgenPath,this.hpo);
         this.geneToDiseaseMap = hpoAssociationParser.getGeneToDiseaseIdMap();
         System.out.println("[INFO] geneToDiseaseMap with " + geneToDiseaseMap.size() + " entries");
         this.geneIdToSymbolMap = hpoAssociationParser.getGeneIdToSymbolMap();
@@ -242,7 +205,7 @@ tg
         double threshold = mean + 2.0*sd;
         System.out.println("[INFO] Writing pairwise gene similarity to file." );
         int aboveThreshold=0;
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(this.output_filename))){
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(this.outname))){
             String [] fields = {"gene1","symbol1","gene2","symbol2","similarity"};
             String header = String.join("\t",fields);
             writer.write(header + "\n");
@@ -282,7 +245,7 @@ tg
         System.out.println("[INFO] Writing pairwise phenotype similarity to file." );
         int aboveThreshold=0;
         try {
-            BufferedWriter writer = new BufferedWriter(new FileWriter(this.output_filename));
+            BufferedWriter writer = new BufferedWriter(new FileWriter(this.outname));
             String [] fields = {"disease1","disease2","similarity"};
             String header = String.join("\t",fields);
             writer.write(header + "\n");
@@ -310,16 +273,16 @@ tg
     /**
      * Run application.
      */
-    public void run() {
-        if (pathHpObo==null || pathPhenotypeHpoa == null) {
+    private void run() {
+        if (hpoPath==null || phenotypeDotHpoaPath == null) {
             System.err.println("[ERROR] Must pass path-to-hp.obo and path-to-phenotype.hpoa");
             System.exit(1);
         }
-        this.hpo = OntologyLoader.loadOntology(new File(pathHpObo));
+        this.hpo = OntologyLoader.loadOntology(new File(hpoPath));
         System.out.println("[INFO] DONE: Loading HPO");
 
         List<String> databases = ImmutableList.of("OMIM"); // restrict ourselves to OMIM entries
-        this.diseaseMap = HpoDiseaseAnnotationParser.loadDiseaseMap(this.pathPhenotypeHpoa, hpo,databases);
+        this.diseaseMap = HpoDiseaseAnnotationParser.loadDiseaseMap(this.phenotypeDotHpoaPath, hpo,databases);
         System.out.println("[INFO] DONE: Loading phenotype.hpoa");
 
         // Compute list of annoations and mapping from OMIM ID to term IDs.
@@ -398,26 +361,7 @@ tg
     }
 
 
-    @Parameters(commandDescription = "Compute similarity demo")
-    public static class Options {
-        @Parameter(names = {"-h"}, description = "path to hp.obo file", required = true)
-        private String hpoPath;
-        @Parameter(names="-a", description = "path to phenotype.hpoa file", required = true)
-        private String phenotypeDotHpoaPath;
-        @Parameter(names="-o",description = "output file name")
-        private String outname="pairwise_disease_similarity.tsv";
-        @Parameter(names="--geneinfo",description = "path to downloaded file ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz")
-        private String geneInfoPath;
-        @Parameter(names="--mimgene2medgen",description = "path to downloaded file from ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/mim2gene_medgen")
-        private String mim2genMedgenPath;
-        String getHpoPath() { return hpoPath; }
 
-        String getPhenotypeDotHpoaPath() {
-            return phenotypeDotHpoaPath;
-        }
-
-        String getOutname() { return outname; }
-    }
 
 
 }
