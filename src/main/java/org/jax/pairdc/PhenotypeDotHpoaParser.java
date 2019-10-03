@@ -52,6 +52,15 @@ public class PhenotypeDotHpoaParser {
     }
 
 
+    public String getOldPhenotypeDotHpoaFile() {
+        return this.phenotypeDotHpoaFileOld;
+    }
+
+    public String getNewPhenotypeDotHpoaFile() {
+        return this.phenotypeDotHpoaFileNew;
+    }
+
+
     /**
      * Output a version of the HPOA file that corresponds to date d, i.e., has no lines that
      * were created after d. Also, filter out non-OMIM lines

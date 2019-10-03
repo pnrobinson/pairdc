@@ -288,6 +288,11 @@ public class Main {
     }
 
 
+    private void getGeneLists(String oldPath, String newPath) {
+
+    }
+
+
 
     /**
      * Run application.
@@ -298,6 +303,10 @@ public class Main {
 
         PhenotypeDotHpoaParser phparser = new PhenotypeDotHpoaParser(this.phenotypeDotHpoaPath,dt1,dt2);
         phparser.createDatedPhenotypeHpoaFiles();
+        String oldPhenotypePath = phparser.getOldPhenotypeDotHpoaFile();
+        String newPhenotypePath = phparser.getNewPhenotypeDotHpoaFile();
+
+        getGeneLists(oldPhenotypePath,newPhenotypePath);
 
         if (true) return;
         if (hpoPath==null || phenotypeDotHpoaPath == null) {
