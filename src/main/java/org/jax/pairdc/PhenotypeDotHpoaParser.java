@@ -1,6 +1,7 @@
 package org.jax.pairdc;
 
-import java.io.File;
+import java.io.*;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -45,11 +46,63 @@ public class PhenotypeDotHpoaParser {
         phenotypeDotHpoaFileNew = String.format("%s%s%s", dirname,File.separator,basename2 );
         System.out.println(phenotypeDotHpoaFileNew);
 
+        createDatedFile(date1, phenotypeDotHpoaFileOld);
+        createDatedFile(date2, phenotypeDotHpoaFileNew);
+
     }
 
 
-
-    private void createDatedFile(Date d, String basename) {
+    /**
+     * Output a version of the HPOA file that corresponds to date d, i.e., has no lines that
+     * were created after d. Also, filter out non-OMIM lines
+     * @param d target date
+     * @param pathToNewHpoaFile path to phenotype.hpoa file
+     */
+    private void createDatedFile(Date d, String pathToNewHpoaFile) {
+        int n_skipped_lines = 0;
+        int n_accepted_lines = 0;
+        try {
+            BufferedReader br = new BufferedReader(new FileReader(this.phenotypeDotHpoaFile));
+            String line;
+            BufferedWriter writer = new BufferedWriter(new FileWriter(pathToNewHpoaFile));
+            while ((line = br.readLine()) != null) {
+                if (line.startsWith("#") || line.startsWith("DatabaseID")) {
+                    writer.write(line + "\n"); // output header
+                    continue;
+                }
+                String [] A = line.split("\t");
+                if (A.length != 12) {
+                    // should never happen
+                    throw new RuntimeException("Malformed line " + line);
+                }
+                String datestring = A[11]; // can be single or multiple date.
+                // we can just take the first date and not worry about modification dates
+                int i = datestring.indexOf(";");
+                if (i>0) {
+                    datestring = datestring.substring(0, i);
+                }
+                i = datestring.indexOf("[");
+                if (i>0) {
+                    datestring = datestring.substring(i+1);
+                }
+                i = datestring.indexOf("]");
+                if (i>0) {
+                    datestring = datestring.substring(0,i);
+                }
+                Date biocurationDate = new SimpleDateFormat("yyyy-MM-DD").parse(datestring);
+                if (biocurationDate.before(d)) {
+                    writer.write(line + "\n");
+                    n_accepted_lines ++;
+                } else {
+                    // otherwise the biocuration was after d, so we skip
+                    n_skipped_lines++;
+                }
+            }
+        } catch (IOException | ParseException e) {
+            e.printStackTrace();
+        }
+        System.out.printf("Skipped %d lines that were curated after the target date of %s (wrote %d lines)\n",
+                n_skipped_lines, d.toString(), n_accepted_lines);
 
     }
 
