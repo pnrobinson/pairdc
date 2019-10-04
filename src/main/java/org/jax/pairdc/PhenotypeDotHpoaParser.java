@@ -40,10 +40,10 @@ public class PhenotypeDotHpoaParser {
         String pattern = "yyyy-MM";
         SimpleDateFormat simpleDateFormat = new SimpleDateFormat(pattern);
         String basename1 = String.format("phenotype-%s.hpoa", simpleDateFormat.format(date1));
-        phenotypeDotHpoaFileOld = String.format("%s%s%s", dirname,File.separator,basename1 );
+        phenotypeDotHpoaFileOld = basename1;//String.format("%s%s%s", dirname,File.separator,basename1 );
         System.out.println(phenotypeDotHpoaFileOld);
         String basename2 = String.format("phenotype-%s.hpoa", simpleDateFormat.format(date2));
-        phenotypeDotHpoaFileNew = String.format("%s%s%s", dirname,File.separator,basename2 );
+        phenotypeDotHpoaFileNew = basename2; //String.format("%s%s%s", dirname,File.separator,basename2 );
         System.out.println(phenotypeDotHpoaFileNew);
 
         createDatedFile(date1, phenotypeDotHpoaFileOld);
@@ -107,6 +107,8 @@ public class PhenotypeDotHpoaParser {
                     n_skipped_lines++;
                 }
             }
+            writer.close();
+            br.close();
         } catch (IOException | ParseException e) {
             e.printStackTrace();
         }

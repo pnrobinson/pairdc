@@ -6,6 +6,7 @@ import com.beust.jcommander.ParameterException;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.monarchinitiative.phenol.formats.hpo.HpoDisease;
 import org.monarchinitiative.phenol.io.OntologyLoader;
 import org.monarchinitiative.phenol.io.assoc.HpoAssociationParser;
@@ -90,7 +91,7 @@ public class Main {
 
 
 
-    static class DescriptiveStatistics{
+  /*  static class DescriptiveStatistics{
 
         List<Double> vals;
         Double mean=null;
@@ -133,7 +134,7 @@ public class Main {
             return sd;
         }
     }
-
+*/
 
 
 
@@ -219,7 +220,7 @@ public class Main {
             }
         }
         double mean = stats.getMean();
-        double sd = stats.getSd();
+        double sd = stats.getStandardDeviation();
         System.out.println("\n\n[INFO] Done calculating gene based similarity matrix. Mean="+mean+", sd="+sd);
         double threshold = mean + 2.0*sd;
         System.out.println("[INFO] Writing pairwise gene similarity to file." );
@@ -246,7 +247,7 @@ public class Main {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        System.out.println(String.format("[INFO] skipped vales: %d, good values %d",stats.skippedNanValue,stats.goodValue));
+        System.out.println(String.format("[INFO] skipped vales: %d, good values %d",-42,stats.getN()));
         System.out.println(String.format("[INFO] Wrote %d above threshold (%.3f) pairwise interactions.",aboveThreshold,threshold) );
     }
 
@@ -257,7 +258,7 @@ public class Main {
      */
     private void performDiseaseBasedAnalysis(DescriptiveStatistics stats) {
         double mean = stats.getMean();
-        double sd = stats.getSd();
+        double sd = stats.getStandardDeviation();
         System.out.println("\n\nMean="+mean+", sd="+sd);
 
         double threshold = mean + 2.0*sd;
@@ -294,21 +295,12 @@ public class Main {
 
 
 
-    /**
-     * Run application.
-     */
-    private void run() throws  Exception {
-        Date dt1 = new SimpleDateFormat("MM/yyyy").parse(date1);
-        Date dt2 = new SimpleDateFormat("MM/yyyy").parse(date2);
-
-        PhenotypeDotHpoaParser phparser = new PhenotypeDotHpoaParser(this.phenotypeDotHpoaPath,dt1,dt2);
-        phparser.createDatedPhenotypeHpoaFiles();
-        String oldPhenotypePath = phparser.getOldPhenotypeDotHpoaFile();
-        String newPhenotypePath = phparser.getNewPhenotypeDotHpoaFile();
-
-        getGeneLists(oldPhenotypePath,newPhenotypePath);
-
-        if (true) return;
+    private void init() {
+        HpoAssociationParser hpoAssociationParser = new HpoAssociationParser(this.geneInfoPath,this.mim2genMedgenPath,this.hpo);
+        this.geneToDiseaseMap = hpoAssociationParser.getGeneToDiseaseIdMap();
+        System.out.println("[INFO] geneToDiseaseMap with " + geneToDiseaseMap.size() + " entries");
+        this.geneIdToSymbolMap = hpoAssociationParser.getGeneIdToSymbolMap();
+        System.out.println("[INFO] geneIdToSymbolMap with " + geneIdToSymbolMap.size() + " entries");
         if (hpoPath==null || phenotypeDotHpoaPath == null) {
             System.err.println("[ERROR] Must pass path-to-hp.obo and path-to-phenotype.hpoa");
             System.exit(1);
@@ -319,6 +311,27 @@ public class Main {
         List<String> databases = ImmutableList.of("OMIM"); // restrict ourselves to OMIM entries
         this.diseaseMap = HpoDiseaseAnnotationParser.loadDiseaseMap(this.phenotypeDotHpoaPath, hpo,databases);
         System.out.println("[INFO] DONE: Loading phenotype.hpoa");
+
+    }
+
+
+    /**
+     * Run application.
+     */
+    private void run() throws  Exception {
+        init();
+
+        Date dt1 = new SimpleDateFormat("MM/yyyy").parse(date1);
+        Date dt2 = new SimpleDateFormat("MM/yyyy").parse(date2);
+
+        PhenotypeDotHpoaParser phparser = new PhenotypeDotHpoaParser(this.phenotypeDotHpoaPath,dt1,dt2);
+        phparser.createDatedPhenotypeHpoaFiles();
+        String oldPhenotypePath = phparser.getOldPhenotypeDotHpoaFile();
+        String newPhenotypePath = phparser.getNewPhenotypeDotHpoaFile();
+        Disease2GeneListExtractor extractor = new Disease2GeneListExtractor(oldPhenotypePath,hpo,geneToDiseaseMap,geneIdToSymbolMap);
+        //getGeneLists(oldPhenotypePath,newPhenotypePath);
+
+        if (true) return;
 
 
         // Compute list of annoations and mapping from OMIM ID to term IDs.
@@ -387,7 +400,7 @@ public class Main {
             }
         }
 
-        System.out.println(String.format("[INFO] Disease analysis: skipped values: %d, good values %d",stats.skippedNanValue,stats.goodValue));
+        System.out.println(String.format("[INFO] Disease analysis: skipped values: %d, good values %d",-42,stats.getN()));
         if (doGeneBasedAnalysis) {
             performGeneBasedAnalysis();
         } else {
