@@ -18,10 +18,7 @@ import org.monarchinitiative.phenol.ontology.data.TermIds;
 import org.monarchinitiative.phenol.ontology.similarity.PrecomputingPairwiseResnikSimilarity;
 import org.monarchinitiative.phenol.ontology.similarity.ResnikSimilarity;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -53,6 +50,12 @@ public class Main {
     private String date1;
     @Parameter(names="--date2", description = "Second data for simulation, e.g., 9/2017", required = true)
     private String date2;
+    @Parameter(names={"-t","--theshold"}, description = "SD threshold for disease similarity")
+    private double diseaseSimilarityThreshold = 3.5;
+    /** The gene to disease associations for date 1 (the "old data"). */
+    private Set<Gene2DiseaseAssociation> dateOneg2dassocs;
+    /** The gene to disease associations for date 2 (the "new data"). */
+    private Set<Gene2DiseaseAssociation> dateTwog2dassocs;
 
     /** If true, perform pairwise gene-gene similarity analysis. Otherwise, perform pairwise disease-disease analysis.*/
     private boolean doGeneBasedAnalysis;
@@ -68,7 +71,7 @@ public class Main {
     private Map<TermId,String> geneIdToSymbolMap;
     private int n_diseases;
 
-    public Main() { // no-op
+    private Main() { // no-op
     }
 
     static public void main(String[] args) {
@@ -87,55 +90,6 @@ public class Main {
             e.printStackTrace();
         }
     }
-
-
-
-
-  /*  static class DescriptiveStatistics{
-
-        List<Double> vals;
-        Double mean=null;
-        Double sd=null;
-
-        int skippedNanValue=0;
-        int goodValue=0;
-
-        DescriptiveStatistics(){
-            vals = new ArrayList<>();
-        }
-
-        void addValue(double v) {
-            if (Double.isNaN(v)) {
-                //System.out.println("[ERROR] skipping NaN similarity value");
-                skippedNanValue++;
-                return;
-            }
-            goodValue++;
-            vals.add(v);
-        }
-
-        double getMean() {
-            double sum=0.0;
-            for (double d : vals) {
-                sum += d;
-            }
-            this.mean=sum/(double)vals.size();
-            return this.mean;
-        }
-
-        double getSd() {
-            if (mean==null) {getMean();}
-            final double m = this.mean;
-            double sumOfSquares=0.0;
-            for (double d : vals) {
-                sumOfSquares += (d-m)*(d-m);
-            }
-            this.sd = Math.sqrt((1.0/vals.size())* sumOfSquares);
-            return sd;
-        }
-    }
-*/
-
 
 
     /**
@@ -167,6 +121,7 @@ public class Main {
                 }
                 if (index_j==null) {
                     // System.err.println("[ERROR] Could not retrieve index for disease " + j.getValue());
+                    continue;
                 }
                 double s = this.similarityScores[index_i][index_j];
                 if (s>max) max=s;
@@ -256,17 +211,16 @@ public class Main {
      * Calculate the pairwise disease-disease similarities.
      * @param stats descriptive statices about the comparisons
      */
-    private void performDiseaseBasedAnalysis(DescriptiveStatistics stats) {
+    private void performDiseaseBasedAnalysis(DescriptiveStatistics stats, Writer writer) throws  IOException {
         double mean = stats.getMean();
         double sd = stats.getStandardDeviation();
         System.out.println("\n\nMean="+mean+", sd="+sd);
 
-        double threshold = mean + 2.0*sd;
-        System.out.println("[INFO] Writing pairwise phenotype similarity to file." );
+        double threshold = mean + diseaseSimilarityThreshold*sd;
+        System.out.printf("[INFO] Setting disease/disease similarity threshold to mean + %f*SD = %.2f\n", diseaseSimilarityThreshold,threshold);
+        System.out.println("[INFO] Writing disease/disease pairwise phenotype similarity to file: \"" + outname +"\"" );
         int aboveThreshold=0;
-        try {
-            BufferedWriter writer = new BufferedWriter(new FileWriter(this.outname));
-            String [] fields = {"disease1","disease2","similarity"};
+            String [] fields = {"disease1","d2d","disease2","similarity"};
             String header = String.join("\t",fields);
             writer.write(header + "\n");
             int N = diseaseList.size();
@@ -275,23 +229,17 @@ public class Main {
                     if (similarityScores[i][j]>threshold) {
                         String d1 = diseaseList.get(i).getDiseaseDatabaseId().getValue();
                         String d2 = diseaseList.get(j).getDiseaseDatabaseId().getValue();
-                        writer.write(d1 + "\t" + d2 + "\t" + similarityScores[i][j] + "\n");
+                        writer.write(d1 + "\td2d\t" + d2 + "\t" + similarityScores[i][j] + "\n");
                         aboveThreshold++;
                     }
                 }
             }
-            writer.close();
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
         System.out.println(String.format("[INFO] Wrote %d above threshold (%.3f) pairwise interactions.",aboveThreshold,threshold) );
     }
 
 
-    private void getGeneLists(String oldPath, String newPath) {
 
-    }
 
 
 
@@ -315,6 +263,24 @@ public class Main {
     }
 
 
+
+    private void outputNewDiseaseGeneAssociations() {
+        try {
+            String dt = date2.replace("/","_");
+            String outname =String.format("g2d_associations_test_%s.tsv",dt );
+            BufferedWriter writer = new BufferedWriter(new FileWriter(outname));
+            for (Gene2DiseaseAssociation g2d : dateTwog2dassocs) {
+                if (!dateOneg2dassocs.contains(g2d)) {
+                    writer.write(g2d.getGeneToDiseaseAssociation() + "\n");
+                }
+            }
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
     /**
      * Run application.
      */
@@ -328,24 +294,37 @@ public class Main {
         phparser.createDatedPhenotypeHpoaFiles();
         String oldPhenotypePath = phparser.getOldPhenotypeDotHpoaFile();
         String newPhenotypePath = phparser.getNewPhenotypeDotHpoaFile();
+        System.out.println("Phenotype on " + dt1.toString());
         Disease2GeneListExtractor extractor = new Disease2GeneListExtractor(oldPhenotypePath,hpo,geneToDiseaseMap,geneIdToSymbolMap);
-        //getGeneLists(oldPhenotypePath,newPhenotypePath);
+        dateOneg2dassocs = extractor.getDatedGeneToDiseaseSet();
+        System.out.println("Phenotype on " + dt2.toString());
+        Disease2GeneListExtractor extractor2 = new Disease2GeneListExtractor(newPhenotypePath,hpo,geneToDiseaseMap,geneIdToSymbolMap);
+        dateTwog2dassocs = extractor2.getDatedGeneToDiseaseSet();
 
-        if (true) return;
+        System.out.println("Sanity check -- is everything from date 1 in date 2?");
+        for (Gene2DiseaseAssociation g2d : dateOneg2dassocs) {
+            if (! dateTwog2dassocs.contains(g2d)) {
+                // should never happen, the following is an insanity check
+                throw new RuntimeException("\"New\" annotation file did not contain " + g2d.toString() + " Some thing is wrong!");
+            }
+        }
 
+        outputNewDiseaseGeneAssociations();
+        // Now output disease-disease similarity for the new dataset.
+        List<String> databases = ImmutableList.of("OMIM"); // restrict ourselves to OMIM entries
+        Map<TermId, HpoDisease> dateTwoDiseaseMap = HpoDiseaseAnnotationParser.loadDiseaseMap(newPhenotypePath, hpo,databases);
 
         // Compute list of annoations and mapping from OMIM ID to term IDs.
         final Map<TermId, Collection<TermId>> diseaseIdToTermIds = new HashMap<>();
         final Map<TermId, Collection<TermId>> termIdToDiseaseIds = new HashMap<>();
 
-        for (TermId diseaseId : diseaseMap.keySet()) {
-            HpoDisease disease = diseaseMap.get(diseaseId);
+        for (TermId diseaseId : dateTwoDiseaseMap.keySet()) {
+            HpoDisease disease = dateTwoDiseaseMap.get(diseaseId);
 
             List<TermId> hpoTerms = disease.getPhenotypicAbnormalityTermIdList();
             diseaseIdToTermIds.putIfAbsent(diseaseId, new HashSet<>());
-            // add term anscestors
+            // add term ancestors
             final Set<TermId> inclAncestorTermIds = TermIds.augmentWithAncestors(hpo, Sets.newHashSet(hpoTerms), true);
-
             for (TermId tid : inclAncestorTermIds) {
                 termIdToDiseaseIds.putIfAbsent(tid, new HashSet<>());
                 termIdToDiseaseIds.get(tid).add(diseaseId);
@@ -391,6 +370,7 @@ public class Main {
                 List<TermId> pheno1 = d1.getPhenotypicAbnormalityTermIdList();
                 List<TermId> pheno2 = d2.getPhenotypicAbnormalityTermIdList();
                 double similarity = resnikSimilarity.computeScore(pheno1, pheno2);
+                if (Double.isNaN(similarity)) similarity = 0;
                 similarityScores[i][j]=similarity;
                 similarityScores[j][i]=similarity; // symmetric
                 stats.addValue(similarity);
@@ -400,18 +380,20 @@ public class Main {
             }
         }
 
-        System.out.println(String.format("[INFO] Disease analysis: skipped values: %d, good values %d",-42,stats.getN()));
+        System.out.println(String.format("[INFO] Disease analysis: n similarity values %d", stats.getN()));
         if (doGeneBasedAnalysis) {
             performGeneBasedAnalysis();
         } else {
-            performDiseaseBasedAnalysis(stats);
+            try {
+                BufferedWriter writer = new BufferedWriter(new FileWriter(this.outname));
+                performDiseaseBasedAnalysis(stats, writer);
+                for (Gene2DiseaseAssociation g2d : dateOneg2dassocs ){
+                    writer.write(g2d.getGeneToDiseaseAssociation() + "\n");
+                }
+            } catch (IOException e) {
+            e.printStackTrace();
         }
-
-
+        }
     }
-
-
-
-
 
 }
