@@ -83,6 +83,7 @@ public class Main {
                     parse(args);
         } catch (ParameterException e) {
             e.printStackTrace();
+            return;
         }
         try {
             m.run();
@@ -268,6 +269,7 @@ public class Main {
         try {
             String dt = date2.replace("/","_");
             String outname =String.format("g2d_associations_test_%s.tsv",dt );
+            System.out.println("[INFO] Exporting disease to gene associations to " + outname);
             BufferedWriter writer = new BufferedWriter(new FileWriter(outname));
             for (Gene2DiseaseAssociation g2d : dateTwog2dassocs) {
                 if (!dateOneg2dassocs.contains(g2d)) {
