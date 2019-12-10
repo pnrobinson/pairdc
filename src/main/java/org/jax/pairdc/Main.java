@@ -264,6 +264,21 @@ public class Main {
     }
 
 
+    private void outputOldDiseaseGeneAssociations() {
+        try {
+            String dt = date1.replace("/","_");
+            String outname =String.format("g2d_associations_training_%s.tsv",dt );
+            System.out.println("[INFO] Exporting disease to gene associations to " + outname);
+            BufferedWriter writer = new BufferedWriter(new FileWriter(outname));
+            for (Gene2DiseaseAssociation g2d : dateOneg2dassocs) {
+                writer.write(g2d.getGeneToDiseaseAssociation() + "\n");
+            }
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     private void outputNewDiseaseGeneAssociations() {
         try {
@@ -310,7 +325,7 @@ public class Main {
                 throw new RuntimeException("\"New\" annotation file did not contain " + g2d.toString() + " Some thing is wrong!");
             }
         }
-
+        outputOldDiseaseGeneAssociations();
         outputNewDiseaseGeneAssociations();
         // Now output disease-disease similarity for the new dataset.
         List<String> databases = ImmutableList.of("OMIM"); // restrict ourselves to OMIM entries
@@ -387,7 +402,9 @@ public class Main {
             performGeneBasedAnalysis();
         } else {
             try {
-                BufferedWriter writer = new BufferedWriter(new FileWriter(this.outname));
+                String dt = date2.replace("/","_");
+                String outname =String.format("pairwise_disease_similarity_%s.tsv",dt );
+                BufferedWriter writer = new BufferedWriter(new FileWriter(outname));
                 performDiseaseBasedAnalysis(stats, writer);
                 for (Gene2DiseaseAssociation g2d : dateOneg2dassocs ){
                     writer.write(g2d.getGeneToDiseaseAssociation() + "\n");
